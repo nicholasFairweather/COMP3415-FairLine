@@ -1,0 +1,6 @@
+{
+    "ext": "js,json",
+    "watch": ["src", "route"],
+    "ignore": ["node_modules"],
+    "exec": "node --env-file=.env src/index.js"
+}
