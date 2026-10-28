@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>FairLine Auth Test</title>
+</head>
+
+<body>
+    <h1>FairLine Auth Test</h1>
+
+    <input id="email" placeholder="Email">
+    <input id="password" type="password" placeholder="Password">
+    <br><br>
+    <button onclick="signup()">Sign up</button>
+    <button onclick="login()">Login</button>
+    <button onclick="logout()">Logout</button>
+    <button onclick="whoAmI()">Who am I?</button>
+
+    <p id="message"></p>
+
+    <script>
+        function show(text) {
+            document.getElementById("message").textContent = text;
+        }
+
+        async function send(url) {
+            const res = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    email: document.getElementById("email").value,
+                    password: document.getElementById("password").value,
+                }),
+            });
+            const data = await res.json();
+            if (data.token) {
+                localStorage.setItem("token", data.token);
+                show("Success! You are logged in.");
+            } else {
+                show(data.error);
+            }
+        }
+
+        function signup() { send("/api/auth/signup"); }
+        function login() { send("/api/auth/login"); }
+
+        function logout() {
+            localStorage.removeItem("token");
+            show("Logged out.");
+        }
+
+        async function whoAmI() {
+            const res = await fetch("/api/auth/me", {
+                headers: { Authorization: "Bearer " + localStorage.getItem("token") },
+            });
+            const data = await res.json();
+            show(res.ok ? "Logged in as user " + data.userId + " (" + data.role + ")" : data.error);
+        }
+    </script>
+</body>
+
+</html>
