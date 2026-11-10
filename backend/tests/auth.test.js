@@ -1,4 +1,4 @@
-// these tests use the real database, so Docker Postgres must be running.
+// These tests use the real database, so Docker Postgres must be running.
 import request from "supertest";
 import app from "../src/app.js";
 import pool from "../src/db/pool.js";
@@ -19,12 +19,18 @@ describe("US-01 Create Account", () => {
         const res = await request(app).post("/api/auth/signup").send({ email: EMAIL, password: "password123" });
         expect(res.status).toBe(201);
         expect(res.body.token).toBeDefined();
+        expect(res.body.user.role).toBe("bettor");
     });
 
     test("email already in use is rejected", async () => {
         const res = await request(app).post("/api/auth/signup").send({ email: EMAIL, password: "password123" });
         expect(res.status).toBe(409);
         expect(res.body.error).toBe("Email already in use");
+    });
+
+    test("same email with different case/spaces is also rejected", async () => {
+        const res = await request(app).post("/api/auth/signup").send({ email: "  TEST@lakeheadu.ca ", password: "password123" });
+        expect(res.status).toBe(409);
     });
 
     test("invalid email is rejected", async () => {
@@ -58,10 +64,23 @@ describe("US-02 Login", () => {
         expect(res.body.error).toBe("Invalid email or password");
     });
 
+    test("unknown email shows 'Invalid email or password'", async () => {
+        const res = await request(app).post("/api/auth/login").send({ email: "nobody@lakeheadu.ca", password: "password123" });
+        expect(res.status).toBe(401);
+        expect(res.body.error).toBe("Invalid email or password");
+    });
+
+    test("badly formatted email shows 'Invalid email address'", async () => {
+        const res = await request(app).post("/api/auth/login").send({ email: "not-an-email", password: "password123" });
+        expect(res.status).toBe(400);
+        expect(res.body.error).toBe("Invalid email address");
+    });
+
     test("/me works with a token and fails without one", async () => {
         const login = await request(app).post("/api/auth/login").send({ email: EMAIL, password: "password123" });
         const withToken = await request(app).get("/api/auth/me").set("Authorization", `Bearer ${login.body.token}`);
         expect(withToken.status).toBe(200);
+        expect(withToken.body.role).toBe("bettor");
 
         const withoutToken = await request(app).get("/api/auth/me");
         expect(withoutToken.status).toBe(401);

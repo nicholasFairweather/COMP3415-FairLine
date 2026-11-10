@@ -1,55 +1,63 @@
 import express from "express";
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
 import pool from "../db/pool.js";
 import { isValidEmail, isValidPassword } from "../utils/validation.js";
+import { signToken, requireLogin } from "../middleware/auth.js";
 
 const router = express.Router();
 
-// sign up
+function normalizeEmail(email) {
+    return typeof email === "string" ? email.trim().toLowerCase() : email;
+}
+
+// POST /api/auth/signup (US-01)
 router.post("/signup", async (req, res) => {
-    const { email, password } = req.body;
+    const email = normalizeEmail(req.body.email);
+    const { password } = req.body;
 
     if (!isValidEmail(email)) return res.status(400).json({ error: "Invalid email address" });
     if (!isValidPassword(password)) return res.status(400).json({ error: "Password must be more than 8 characters" });
 
-    const existing = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
-    if (existing.rows.length > 0) return res.status(409).json({ error: "Email already in use" });
-
     const hash = await bcrypt.hash(password, 10);
-    const result = await pool.query(
-        "INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING *",
-        [email, hash]
-    );
-    const user = result.rows[0];
 
-    const token = jwt.sign({ userId: user.user_id, role: user.role }, process.env.JWT_SECRET);
-    res.status(201).json({ token });
+    try {
+        const result = await pool.query(
+            "INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING user_id, email, role",
+            [email, hash]
+        );
+        const user = result.rows[0];
+        res.status(201).json({ token: signToken(user), user });
+    } catch (err) {
+        // 23505 = unique violation on email
+        if (err.code === "23505") return res.status(409).json({ error: "Email already in use" });
+        throw err;
+    }
 });
 
-// login
+// POST /api/auth/login (US-02)
 router.post("/login", async (req, res) => {
-    const { email, password } = req.body;
+    const email = normalizeEmail(req.body.email);
+    const { password } = req.body;
+
+    if (!isValidEmail(email)) return res.status(400).json({ error: "Invalid email address" });
 
     const result = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
     const user = result.rows[0];
 
-    if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+    const passwordOk = user && typeof password === "string" && (await bcrypt.compare(password, user.password_hash));
+    if (!passwordOk) {
         return res.status(401).json({ error: "Invalid email or password" });
     }
 
-    const token = jwt.sign({ userId: user.user_id, role: user.role }, process.env.JWT_SECRET);
-    res.json({ token });
+    res.json({
+        token: signToken(user),
+        user: { user_id: user.user_id, email: user.email, role: user.role },
+    });
 });
 
-// check who is logged in
-router.get("/me", (req, res) => {
-    try {
-        const token = req.headers.authorization.split(" ")[1];
-        res.json(jwt.verify(token, process.env.JWT_SECRET));
-    } catch {
-        res.status(401).json({ error: "You must be logged in" });
-    }
+// GET /api/auth/me - who is logged in
+router.get("/me", requireLogin, (req, res) => {
+    res.json(req.user);
 });
 
 export default router;
