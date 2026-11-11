@@ -1,14 +1,16 @@
-node_modules
+node_modules/
 
 .env
 
-ml/.venv/
+.venv/
 
-ml/.env
+ml/.venv/
 
 ml/data/
 
 __pycache__/
+
+.pytest_cache/
 
 *.ipynb_checkpoints/
 
