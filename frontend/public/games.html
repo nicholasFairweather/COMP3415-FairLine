@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>FairLine - Games</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <nav>
+        <a class="brand" href="games.html">FairLine</a>
+        <a href="games.html">Games</a>
+        <a href="picks.html">My picks</a>
+        <span id="login-status"></span>
+    </nav>
+
+    <main>
+        <h1>Games</h1>
+
+        <div class="filters">
+            <label>Season <select id="season"></select></label>
+            <label>Week <select id="week"></select></label>
+            <label>Team <select id="team"></select></label>
+        </div>
+
+        <div id="games">Loading games…</div>
+
+        <p class="disclaimer">
+            FairLine is a research tool only. It does not accept bets or payments, and nothing here is
+            financial advice. Please gamble responsibly.
+        </p>
+    </main>
+
+    <script src="common.js"></script>
+    <script>
+        let allGames = [];
+        let loggedIn = false;
+        const messages = {}; // game_id -> { ok, text }
+
+        function hasStarted(game) {
+            return new Date(game.kickoff) <= new Date();
+        }
+
+        function fillSelect(id, values, label, allText) {
+            const select = document.getElementById(id);
+            const current = select.value;
+            select.innerHTML = (allText ? `<option value="">${allText}</option>` : "") +
+                values.map((v) => `<option value="${esc(v)}">${esc(label(v))}</option>`).join("");
+            if (values.map(String).includes(current)) select.value = current;
+        }
+
+        // Fills the filters and starts on the next week that has games left to play
+        function setUpFilters() {
+            const seasons = [...new Set(allGames.map((g) => g.season))].sort((a, b) => b - a);
+            fillSelect("season", seasons, (s) => s);
+
+            const teams = [...new Set(allGames.flatMap((g) => [g.home_team, g.away_team]))].sort();
+            fillSelect("team", teams, (t) => t, "All teams");
+
+            const byKickoff = allGames.slice().sort((a, b) => new Date(a.kickoff) - new Date(b.kickoff));
+            const next = byKickoff.find((g) => !hasStarted(g)) || byKickoff[byKickoff.length - 1];
+            if (next) document.getElementById("season").value = next.season;
+            updateWeeks();
+            if (next) document.getElementById("week").value = next.week;
+        }
+
+        function updateWeeks() {
+            const season = document.getElementById("season").value;
+            const weeks = [...new Set(allGames.filter((g) => String(g.season) === season).map((g) => g.week))]
+                .sort((a, b) => a - b);
+            fillSelect("week", weeks, (w) => "Week " + w, "All weeks");
+        }
+
+        function render() {
+            const season = document.getElementById("season").value;
+            const week = document.getElementById("week").value;
+            const team = document.getElementById("team").value;
+
+            const games = allGames
+                .filter((g) => !season || String(g.season) === season)
+                .filter((g) => !week || String(g.week) === week)
+                .filter((g) => !team || g.home_team === team || g.away_team === team)
+                .sort((a, b) => new Date(a.kickoff) - new Date(b.kickoff));
+
+            const box = document.getElementById("games");
+            if (games.length === 0) {
+                box.innerHTML = '<div class="empty">No games scheduled for this week</div>';
+                return;
+            }
+
+            box.innerHTML = games.map((g) => {
+                const started = hasStarted(g);
+                const hasScore = g.home_team_score != null && g.away_team_score != null;
+                const msg = messages[g.game_id];
+
+                let right;
+                if (started) {
+                    right = hasScore
+                        ? `<span class="small">Final: ${g.away_team_score} – ${g.home_team_score}</span>`
+                        : `<span class="small">Game already in progress</span>`;
+                } else {
+                    right = `
+                        <div class="actions">
+                            <button data-game="${g.game_id}" data-team="${esc(g.away_team)}">Pick ${esc(g.away_team)}</button>
+                            <button data-game="${g.game_id}" data-team="${esc(g.home_team)}">Pick ${esc(g.home_team)}</button>
+                        </div>`;
+                }
+
+                return `
+                    <div class="card">
+                        <div>
+                            <div class="matchup">${esc(g.away_team)} @ ${esc(g.home_team)}</div>
+                            <div class="small">${formatKickoff(g.kickoff)} · Season ${g.season} · Week ${g.week}</div>
+                        </div>
+                        ${right}
+                        ${msg ? `<p class="message ${msg.ok ? "ok" : "bad"}">${esc(msg.text)}</p>` : ""}
+                    </div>`;
+            }).join("");
+        }
+
+        // US-05: save a pick
+        async function savePick(gameId, team) {
+            if (!loggedIn) {
+                messages[gameId] = { ok: false, text: "You must be logged in to save picks" };
+                render();
+                return;
+            }
+
+            const res = await api("/picks", "POST", { game_id: gameId, team_picked: team });
+            if (res.status === 401) {
+                localStorage.removeItem("token");
+                loggedIn = false;
+                messages[gameId] = { ok: false, text: "You must be logged in to save picks" };
+                showLoginStatus();
+            } else if (res.ok) {
+                messages[gameId] = { ok: true, text: "Pick successfully saved: " + team };
+            } else {
+                messages[gameId] = { ok: false, text: res.data?.error || "Could not save pick" };
+            }
+            render();
+        }
+
+        document.getElementById("games").addEventListener("click", (event) => {
+            const button = event.target.closest("button[data-game]");
+            if (button) savePick(Number(button.dataset.game), button.dataset.team);
+        });
+        document.getElementById("season").onchange = () => { updateWeeks(); render(); };
+        document.getElementById("week").onchange = render;
+        document.getElementById("team").onchange = render;
+
+        async function start() {
+            loggedIn = await showLoginStatus();
+            const res = await api("/games");
+            if (!res.ok) {
+                document.getElementById("games").innerHTML =
+                    '<div class="empty">Could not load games. Is the backend running?</div>';
+                return;
+            }
+            allGames = res.data;
+            setUpFilters();
+            render();
+        }
+
+        start();
+    </script>
+</body>
+
+</html>
