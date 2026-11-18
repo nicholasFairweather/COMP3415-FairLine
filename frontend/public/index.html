@@ -35,7 +35,7 @@
             const data = await res.json();
             if (data.token) {
                 localStorage.setItem("token", data.token);
-                show("Success! You are logged in.");
+                location.href = "games.html";
             } else {
                 show(data.error);
             }

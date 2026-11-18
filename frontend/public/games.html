@@ -56,7 +56,7 @@
             fillSelect("season", seasons, (s) => s);
 
             const teams = [...new Set(allGames.flatMap((g) => [g.home_team, g.away_team]))].sort();
-            fillSelect("team", teams, (t) => t, "All teams");
+            fillSelect("team", teams, (t) => teamName(t), "All teams");
 
             const byKickoff = allGames.slice().sort((a, b) => new Date(a.kickoff) - new Date(b.kickoff));
             const next = byKickoff.find((g) => !hasStarted(g)) || byKickoff[byKickoff.length - 1];
@@ -100,17 +100,20 @@
                         ? `<span class="small">Final: ${g.away_team_score} – ${g.home_team_score}</span>`
                         : `<span class="small">Game already in progress</span>`;
                 } else {
+                    const hasOdds = g.home_odds != null && g.away_odds != null;
+                    const price = (odds) => (hasOdds ? ` (${formatOdds(odds)})` : "");
                     right = `
                         <div class="actions">
-                            <button data-game="${g.game_id}" data-team="${esc(g.away_team)}">Pick ${esc(g.away_team)}</button>
-                            <button data-game="${g.game_id}" data-team="${esc(g.home_team)}">Pick ${esc(g.home_team)}</button>
+                            <button data-game="${g.game_id}" data-team="${esc(g.away_team)}">Pick ${esc(g.away_team)}${price(g.away_odds)}</button>
+                            <button data-game="${g.game_id}" data-team="${esc(g.home_team)}">Pick ${esc(g.home_team)}${price(g.home_odds)}</button>
+                            <span class="small">${hasOdds ? "Odds: " + esc(g.bookmaker) : "Odds not available"}</span>
                         </div>`;
                 }
 
                 return `
                     <div class="card">
                         <div>
-                            <div class="matchup">${esc(g.away_team)} @ ${esc(g.home_team)}</div>
+                            <div class="matchup">${esc(teamName(g.away_team))} @ ${esc(teamName(g.home_team))}</div>
                             <div class="small">${formatKickoff(g.kickoff)} · Season ${g.season} · Week ${g.week}</div>
                         </div>
                         ${right}

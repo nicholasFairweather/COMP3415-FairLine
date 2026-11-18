@@ -18,6 +18,20 @@ async function checkPickable(gameId, team) {
     return { game };
 }
 
+// Latest moneyline price for the picked team, or null if no odds yet
+async function latestOddsFor(game, team) {
+    const result = await pool.query(
+        `SELECT home_odds, away_odds FROM odds
+         WHERE game_id = $1
+         ORDER BY fetched_at DESC, bookmaker
+         LIMIT 1`,
+        [game.game_id]
+    );
+    const odds = result.rows[0];
+    if (!odds) return null;
+    return team === game.home_team ? odds.home_odds : odds.away_odds;
+}
+
 function isValidStake(stake) {
     return stake === undefined || stake === null || (typeof stake === "number" && stake > 0);
 }
@@ -32,11 +46,13 @@ router.post("/", async (req, res) => {
     const check = await checkPickable(game_id, team_picked);
     if (check.error) return res.status(check.status).json({ error: check.error });
 
+    const oddsAtPick = await latestOddsFor(check.game, team_picked);
+
     try {
         const result = await pool.query(
-            `INSERT INTO picks (user_id, game_id, team_picked, stake)
-             VALUES ($1, $2, $3, $4) RETURNING *`,
-            [req.user.userId, game_id, team_picked, stake ?? null]
+            `INSERT INTO picks (user_id, game_id, team_picked, odds_at_pick, stake)
+             VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+            [req.user.userId, game_id, team_picked, oddsAtPick, stake ?? null]
         );
         res.status(201).json({ message: "Pick successfully saved", pick: result.rows[0] });
     } catch (err) {
@@ -79,10 +95,13 @@ router.put("/:id", async (req, res) => {
     const check = await checkPickable(pick.game_id, team);
     if (check.error) return res.status(check.status).json({ error: check.error });
 
+    // Switching teams records that team's current odds; changing only the stake keeps the original odds
+    const oddsAtPick = team === pick.team_picked ? pick.odds_at_pick : await latestOddsFor(check.game, team);
+
     const result = await pool.query(
-        `UPDATE picks SET team_picked = $1, stake = $2, updated_at = NOW()
-         WHERE pick_id = $3 RETURNING *`,
-        [team, stake, pick.pick_id]
+        `UPDATE picks SET team_picked = $1, stake = $2, odds_at_pick = $3, updated_at = NOW()
+         WHERE pick_id = $4 RETURNING *`,
+        [team, stake, oddsAtPick, pick.pick_id]
     );
     res.json({ message: "Pick updated", pick: result.rows[0] });
 });

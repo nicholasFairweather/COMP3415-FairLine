@@ -69,7 +69,7 @@
                             <button data-action="delete" data-id="${p.pick_id}">Delete</button>
                         </div>
                         <div style="flex: 1">
-                            <div class="matchup">${esc(p.away_team)} @ ${esc(p.home_team)}</div>
+                            <div class="matchup">${esc(teamName(p.away_team))} @ ${esc(teamName(p.home_team))}</div>
                             <div class="small">${formatKickoff(p.kickoff)} · Week ${p.week}</div>
                             <div class="small">
                                 Your pick: <b>${esc(p.team_picked)}</b> · Odds when saved: ${formatOdds(p.odds_at_pick)}
