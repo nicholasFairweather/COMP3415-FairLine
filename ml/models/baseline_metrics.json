@@ -1,0 +1,24 @@
+{
+  "version": "elo_logreg_v1",
+  "test_start": 2024,
+  "results": {
+    "model (logreg on elo_diff)": {
+      "log_loss": 0.6265606149091713,
+      "brier": 0.21860540338052165,
+      "accuracy": 0.65,
+      "n": 680
+    },
+    "raw Elo probability": {
+      "log_loss": 0.6269163695113954,
+      "brier": 0.2187871557563661,
+      "accuracy": 0.6514705882352941,
+      "n": 680
+    },
+    "always the home win rate": {
+      "log_loss": 0.6929462697689263,
+      "brier": 0.24989292832750581,
+      "accuracy": 0.5294117647058824,
+      "n": 680
+    }
+  }
+}
