@@ -38,6 +38,14 @@ beforeAll(async () => {
     futureGame = await createGame("Test Home A", "Test Away A", 7);
     futureGame2 = await createGame("Test Home B", "Test Away B", 7);
     startedGame = await createGame("Test Home C", "Test Away C", -1);
+
+    // Odds for the first game only (an older and a newer snapshot; the newer one should be used)
+    await pool.query(
+        `INSERT INTO odds (game_id, bookmaker, home_odds, away_odds, fetched_at) VALUES
+         ($1, 'testbook', -110, 105, NOW() - INTERVAL '1 hour'),
+         ($1, 'testbook', -150, 130, NOW())`,
+        [futureGame.game_id]
+    );
 });
 
 afterAll(async () => {
@@ -55,6 +63,7 @@ describe("US-05 Save a pick", () => {
         expect(res.status).toBe(201);
         expect(res.body.message).toBe("Pick successfully saved");
         expect(res.body.pick.team_picked).toBe("Test Away A");
+        expect(res.body.pick.odds_at_pick).toBe(130); // latest away price when the pick was saved
         expect(res.body.pick.status).toBe("pending");
     });
 
@@ -86,6 +95,13 @@ describe("US-05 Save a pick", () => {
         expect(res.status).toBe(400);
     });
 
+    test("game with no odds saves the pick with odds_at_pick = null", async () => {
+        const res = await request(app).post("/api/picks").set(auth(token))
+            .send({ game_id: futureGame2.game_id, team_picked: "Test Home B" });
+        expect(res.status).toBe(201);
+        expect(res.body.pick.odds_at_pick).toBeNull();
+    });
+
     test("unknown game gives 'Game not found'", async () => {
         const res = await request(app).post("/api/picks").set(auth(token))
             .send({ game_id: 999999, team_picked: "Test Home A" });
@@ -104,7 +120,7 @@ describe("US-06 View, edit and delete saved picks", () => {
     test("a user sees only their own picks, with game details", async () => {
         const res = await request(app).get("/api/picks").set(auth(token));
         expect(res.status).toBe(200);
-        expect(res.body).toHaveLength(1);
+        expect(res.body).toHaveLength(2);
         expect(res.body[0]).toHaveProperty("home_team");
         expect(res.body[0]).toHaveProperty("odds_at_pick");
         expect(res.body[0]).toHaveProperty("status");
@@ -123,6 +139,18 @@ describe("US-06 View, edit and delete saved picks", () => {
             .send({ team_picked: "Test Home A" });
         expect(res.status).toBe(200);
         expect(res.body.pick.team_picked).toBe("Test Home A");
+        expect(res.body.pick.odds_at_pick).toBe(-150); // switching teams records the new team's odds
+    });
+
+    test("changing only the stake keeps the original odds", async () => {
+        const list = await request(app).get("/api/picks").set(auth(token));
+        const pick = list.body.find((p) => p.game_id === futureGame.game_id);
+
+        const res = await request(app).put(`/api/picks/${pick.pick_id}`).set(auth(token))
+            .send({ stake: 40 });
+        expect(res.status).toBe(200);
+        expect(res.body.pick.stake).toBe("40.00");
+        expect(res.body.pick.odds_at_pick).toBe(-150);
     });
 
     test("another user cannot edit or delete my pick", async () => {

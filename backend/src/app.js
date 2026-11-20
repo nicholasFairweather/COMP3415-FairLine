@@ -8,7 +8,7 @@ const app = express();
 
 app.use(cors({ origin: 'http://localhost:5173' }));
 app.use(express.json());
-app.use(express.static("public"));
+app.use(express.static("../frontend/public"));
 app.use("/api/games", router);
 app.use("/api/auth", authRouter);
 app.use("/api/picks", picksRouter);
