@@ -145,3 +145,46 @@ button:hover {
     color: #5f6673;
     font-size: 12px;
 }
+
+
+.stats {
+    width: 100%;
+    margin: 16px 0 8px;
+    border-collapse: collapse;
+    background: #fff;
+    border: 1px solid #dde0e6;
+    border-radius: 8px;
+    overflow: hidden;
+    font-size: 14px;
+}
+
+.stats th,
+.stats td {
+    padding: 10px 14px;
+    border-bottom: 1px solid #eef0f3;
+    text-align: right;
+}
+
+.stats th:first-child {
+    text-align: left;
+    font-weight: 600;
+    color: #5f6673;
+}
+
+.stats tr:first-child th {
+    color: #1d2129;
+    font-size: 15px;
+}
+
+.stats .good {
+    color: #1e7b34;
+    font-weight: 600;
+}
+
+.stats .bad {
+    color: #b42318;
+}
+
+.matchup a {
+    color: inherit;
+}

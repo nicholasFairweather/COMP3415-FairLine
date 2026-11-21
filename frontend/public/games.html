@@ -72,6 +72,15 @@
             fillSelect("week", weeks, (w) => "Week " + w, "All weeks");
         }
 
+        function modelLine(g) {
+            const details = `<a href="game.html?id=${g.game_id}">Details</a>`;
+            if (g.home_win_prob == null) return `Model prediction not available · ${details}`;
+            const home = g.home_win_prob >= 0.5;
+            const p = home ? g.home_win_prob : 1 - g.home_win_prob;
+            return `Model: ${esc(home ? g.home_team : g.away_team)} ${(p * 100).toFixed(0)}% · ${details}`;
+        }
+
+
         function render() {
             const season = document.getElementById("season").value;
             const week = document.getElementById("week").value;
@@ -113,8 +122,9 @@
                 return `
                     <div class="card">
                         <div>
-                            <div class="matchup">${esc(teamName(g.away_team))} @ ${esc(teamName(g.home_team))}</div>
+                            <div class="matchup"><a href="game.html?id=${g.game_id}">${esc(teamName(g.away_team))} @ ${esc(teamName(g.home_team))}</a></div>
                             <div class="small">${formatKickoff(g.kickoff)} · Season ${g.season} · Week ${g.week}</div>
+                            <div class="small">${modelLine(g)}</div>
                         </div>
                         ${right}
                         ${msg ? `<p class="message ${msg.ok ? "ok" : "bad"}">${esc(msg.text)}</p>` : ""}

@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>FairLine - Game details</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <nav>
+        <a class="brand" href="games.html">FairLine</a>
+        <a href="games.html">Games</a>
+        <a href="picks.html">My picks</a>
+        <span id="login-status"></span>
+    </nav>
+
+    <main>
+        <p><a href="games.html">← All games</a></p>
+        <div id="game">Loading game…</div>
+
+        <p class="disclaimer">
+            FairLine is a research tool only. It does not accept bets or payments, and nothing here is
+            financial advice. Please gamble responsibly.
+        </p>
+    </main>
+
+    <script src="common.js"></script>
+    <script>
+        let game = null;
+        let loggedIn = false;
+        let message = null; // { ok, text }
+
+        const pct = (p) => (p == null ? "—" : (p * 100).toFixed(1) + "%");
+        const signedPct = (p) => (p == null ? "—" : (p > 0 ? "+" : "") + (p * 100).toFixed(1) + "%");
+        const money = (x) => (x == null ? "—" : (x >= 0 ? "+$" : "−$") + Math.abs(x).toFixed(2));
+        const tone = (x) => (x == null ? "" : x > 0 ? "good" : x < 0 ? "bad" : "");
+
+        function render() {
+            const g = game;
+            const m = g.market;
+            const started = new Date(g.kickoff) <= new Date();
+            const hasScore = g.home_team_score != null && g.away_team_score != null;
+
+            const row = (label, away, home, awayClass = "", homeClass = "") =>
+                `<tr><th>${label}</th><td class="${awayClass}">${away}</td><td class="${homeClass}">${home}</td></tr>`;
+
+            let table = '<div class="empty">Odds not available</div>';
+            if (m) {
+                table = `
+                    <table class="stats">
+                        <tr><th></th><th>${esc(teamName(g.away_team))}</th><th>${esc(teamName(g.home_team))}</th></tr>
+                        ${row("Odds", formatOdds(g.away_odds), formatOdds(g.home_odds))}
+                        ${row("Implied probability", pct(m.away.implied_prob), pct(m.home.implied_prob))}
+                        ${row("Fair probability (no-vig)", pct(m.away.no_vig_prob), pct(m.home.no_vig_prob))}
+                        ${row("Model win probability", pct(m.away.model_prob), pct(m.home.model_prob))}
+                        ${row("Edge", signedPct(m.away.edge), signedPct(m.home.edge), tone(m.away.edge), tone(m.home.edge))}
+                        ${row("Expected value per $100", money(m.away.ev == null ? null : m.away.ev * 100),
+                    money(m.home.ev == null ? null : m.home.ev * 100), tone(m.away.ev), tone(m.home.ev))}
+                    </table>
+                    <p class="small">Odds from ${esc(g.bookmaker)}.
+                        ${g.home_win_prob == null
+                        ? "<b>Model prediction not available</b> for this game yet."
+                        : `Model: ${esc(g.model_version)}.`}
+                    </p>
+                    <p class="small">
+                        <b>Fair probability</b> is the sportsbook's price with its cut removed.
+                        <b>Edge</b> is the model's probability minus the fair probability: positive means the model
+                        rates that team higher than the market does. <b>Expected value</b> is the average profit
+                        per $100 bet if the model is right.
+                    </p>`;
+            }
+
+            let picks = "";
+            if (started) {
+                picks = `<p class="small">${hasScore
+                    ? `Final: ${esc(g.away_team)} ${g.away_team_score} – ${g.home_team_score} ${esc(g.home_team)}`
+                    : "Game already in progress"}</p>`;
+            } else {
+                picks = `
+                    <div class="actions">
+                        <button data-team="${esc(g.away_team)}">Pick ${esc(teamName(g.away_team))}</button>
+                        <button data-team="${esc(g.home_team)}">Pick ${esc(teamName(g.home_team))}</button>
+                    </div>
+                    ${message ? `<p class="message ${message.ok ? "ok" : "bad"}">${esc(message.text)}</p>` : ""}`;
+            }
+
+            document.getElementById("game").innerHTML = `
+                <h1>${esc(teamName(g.away_team))} @ ${esc(teamName(g.home_team))}</h1>
+                <p class="small">${formatKickoff(g.kickoff)} · Season ${g.season} · Week ${g.week}</p>
+                ${table}
+                <h2>Save a pick</h2>
+                ${picks}`;
+        }
+
+        // US-05: save a pick from this page
+        async function savePick(team) {
+            if (!loggedIn) {
+                message = { ok: false, text: "You must be logged in to save picks" };
+                return render();
+            }
+            const res = await api("/picks", "POST", { game_id: game.game_id, team_picked: team });
+            if (res.status === 401) {
+                localStorage.removeItem("token");
+                loggedIn = false;
+                message = { ok: false, text: "You must be logged in to save picks" };
+                showLoginStatus();
+            } else if (res.ok) {
+                message = { ok: true, text: "Pick successfully saved: " + teamName(team) };
+            } else {
+                message = { ok: false, text: res.data?.error || "Could not save pick" };
+            }
+            render();
+        }
+
+        document.getElementById("game").addEventListener("click", (event) => {
+            const button = event.target.closest("button[data-team]");
+            if (button) savePick(button.dataset.team);
+        });
+
+        async function start() {
+            loggedIn = await showLoginStatus();
+            const id = new URLSearchParams(location.search).get("id");
+            const res = await api("/games/" + encodeURIComponent(id || ""));
+            if (!res.ok) {
+                document.getElementById("game").innerHTML =
+                    `<div class="empty">${esc(res.data?.error || "Could not load this game.")}</div>`;
+                return;
+            }
+            game = res.data;
+            render();
+        }
+
+        start();
+    </script>
+</body>
+
+</html>
